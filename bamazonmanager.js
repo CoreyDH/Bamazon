@@ -26,7 +26,8 @@ Manager.prototype.header = function(msg) {
   console.log('\033c'); // Clears the terminal
   console.log('============ Manager Dashboard ============');
   if(msg) {
-    console.log(msg);
+    console.log(' ');
+    console.log('> ' + msg);
   }
   console.log(' ');
 };
@@ -62,16 +63,77 @@ Manager.prototype.promptMenu = function() {
         break;
 
       case 'Add New Product':
+        self.addProduct();
         break;
 
       case 'Exit':
+        self.exit();
         break;
 
+      default:
+        self.promptMenu();
+        break;
     }
 
   });
 };
 
+Manager.prototype.exit = function() {
+  bamazonDB.end(function() {
+    console.log(' ');
+    console.log('Signed off.');
+  });
+};
+
+Manager.prototype.addProduct = function() {
+
+  var self = this;
+
+  this.header();
+
+  inquirer.prompt([
+    {
+      name: 'ProductName',
+      type: 'input',
+      message: 'Enter the product name: ',
+    },
+    {
+      name: 'DepartmentName',
+      type: 'input',
+      message: 'Enter the department it\'s under: ',
+    },
+    {
+      name: 'Price',
+      type: 'input',
+      message: 'Enter the price: ',
+      validate: function(input) {
+        return isNaN(input) ? false : true;
+      }
+    },
+    {
+      name: 'StockQuantity',
+      type: 'input',
+      message: 'Enter the stock inventory: ',
+      validate: function(input) {
+        return isNaN(input) ? false : true;
+      }
+    },
+  ]).then(function(products) {
+
+    products.Price = parseFloat(products.Price).toFixed(2);
+    products.StockQuantity = parseInt(products.StockQuantity);
+
+    bamazonDB.query('INSERT INTO products SET ?', products, function(err, results) {
+      if(err) throw err;
+
+      if(results.affectedRows > 0) {
+        self.header('Product '+products.ProductName+' has been added to the database!');
+        self.promptMenu();
+      }
+    });
+
+  });
+};
 
 Manager.prototype.addInventory = function() {
 
@@ -103,30 +165,24 @@ Manager.prototype.addInventory = function() {
       },
     ]).then(function(products) {
 
-      console.log(products);
+      // Pull first number
       var pid = parseInt(products.item.match(/\d+/));
 
+      // Find matching row
       var selectedRow = rows.filter(function(obj) {
-        // console.log(pid, obj.ItemID, pid === obj.ItemID);
         return pid === obj.ItemID;
       });
 
-      console.log(selectedRow, selectedRow[0].StockQuantity, products.addStock);
-
-      var qty = selectedRow[0].StockQuantity + (parsetInt(products.addStock));
-
-      console.log('before sql');
+      var qty = selectedRow[0].StockQuantity + parseInt(products.addStock);
 
       var sql = 'UPDATE products SET StockQuantity='+bamazonDB.escape(qty)+' WHERE ItemID='+bamazonDB.escape(pid);
-      var insert = [qty, id];
+
       bamazonDB.query(sql, function(err, response) {
         if(err) throw err;
 
         if(response.affectedRows === 1) {
-
-          console.log(selectedRow);
-          // self.header('Stock Quantity for has been updated!');
-          // self.promptMenu();
+          self.header('Stock Quantity for "'+ selectedRow[0].ProductName +'" has been updated from ' + selectedRow[0].StockQuantity + ' to '+ qty +'!');
+          self.promptMenu();
         }
       });
 
